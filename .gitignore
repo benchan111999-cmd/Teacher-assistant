@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+Lib/
+Scripts/
+Include/
+pyvenv.cfg
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+build/
+
+# Environment and local data
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs and generated output
+*.log
+*.tmp
+backend/test_output.txt
+backend/test_result.txt
+backend/verify_output.txt
+
+# Local agent/tool state
+.codex
+.codex/
+.opencode/
+opencode.json
+/package.json
+/package-lock.json
+
+# Local one-off scripts
+bg_server.py
+debug.py
+standalone_launch.py
+get-pip.py
+start_backend.bat
+backend/quick_test.py
+backend/test_*.py
+backend/test_ok.txt
+backend/verify.py
