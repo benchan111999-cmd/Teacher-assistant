@@ -53,3 +53,14 @@ backend/quick_test.py
 backend/test_*.py
 backend/test_ok.txt
 backend/verify.py
+
+# System files
+desktop.ini
+Thumbs.db
+.DS_Store
+~$*
+
+# Sensitive credentials
+*.key
+credentials.*
+secrets.*

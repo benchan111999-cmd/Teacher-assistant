@@ -1,9 +1,47 @@
 # AGENTS.md
 
- Primary audience AI coding agents (OpenAI, Claude, etc.) working on this repo.  
+ Primary audience AI coding agents (OpenAI, Claude, etc.) working on this repo.
  本檔案主要給 AI 協助開發本專案時參考，用「單一總控檔 + 模組化程式結構」的方式設計。
 
 ---
+
+## 0. #07 project work mode
+
+This repo uses the Codex #07 classroom-tool work mode.
+
+- Project name: `Teacher-Assistant`
+- Purpose: Turn sources/materials -> topic extraction -> curriculum -> lesson plans -> course notes.
+- Primary working tree: `/home/dicatobear/projects/Teacher-assistant`
+- GitHub repo: `https://github.com/benchan111999-cmd/Teacher-assistant`
+- Default branch: `main`
+- Obsidian vault: `/mnt/c/Users/User/iCloudDrive/iCloud~md~obsidian/2ndBrain`
+- Obsidian dashboard: `Teacher-Assistant/專案工作流程.md`
+- Firebase: used, but do not add credentials or schema changes unless explicitly requested.
+- Deployment target: GitHub Pages; deployment workflow is not configured yet.
+
+Open work:
+
+- Use `startup-sync`.
+- Read this file and the Obsidian dashboard.
+- Check git status.
+- Do not automatically pull, commit, or push.
+
+Close work:
+
+- Use `shutdown-sync`.
+- Update the Obsidian dashboard with progress and next steps.
+- Update this file only when stable rules, paths, or project boundaries changed.
+- Commit or push only after explicit approval, and stage only relevant files.
+
+Project initialization:
+
+- Use `project-init-sync`.
+- For this existing repo, inspect first and fill only missing pieces. Do not overwrite existing app code, Firebase settings, or Git history.
+
+Safety:
+
+- Do not commit `.codex/`, `.opencode/`, `.env*`, API keys, tokens, passwords, or private credentials.
+- Do not store student names; formal student data should use class codes and seat numbers.
 
 ## 1. Project overview
 
