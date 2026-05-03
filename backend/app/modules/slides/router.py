@@ -18,7 +18,7 @@ def generate_slides(
     service: SlidesService = Depends(get_slides_service),
 ):
     slides = service.generate_yaml(lesson_id)
-    return {"id": slides.id, "lesson_id": slides.lesson_id}
+    return {"id": slides.id, "lesson_id": slides.lesson_id, "yaml": slides.yaml}
 
 
 @router.put("/yaml/{lesson_id}")
