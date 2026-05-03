@@ -8,7 +8,7 @@ Teacher-Assistant is a prototype modular monolith. The backend exposes the core 
 
 The app is not yet a fully functioning end-to-end teaching assistant. The current implementation supports basic CRUD-like flows and service stubs, while several target capabilities remain incomplete:
 
-- Document parsing can create `Section` records, but parser quality varies by file type and scanned PDFs may require OCR dependencies.
+- Document parsing can create `Section` records, supports one-shot PDF passwords, and can fall back to local English Tesseract OCR for flattened PDFs when the runtime is installed.
 - Topic extraction, outline suggestion, lesson generation, and slide YAML generation depend on LLM helper functions with fallback behavior.
 - Topic clustering is represented through `cluster_id`, but embeddings and automatic clustering are not yet implemented.
 - Slide HTML rendering is currently a minimal YAML-in-HTML wrapper, not a themeable Jinja2 renderer.
@@ -71,6 +71,8 @@ The current backend uses integer primary keys for all entities:
   - `id`, `material_id`, `title`, `body`, `position`
 - `Topic`
   - `id`, `curriculum_version_id`, `name`, `summary`, `tags`, `source_section_ids`, `cluster_id`
+- `Subtopic`
+  - `id`, `topic_id`, `name`, `summary`, `position`, `source_section_ids`
 - `CurriculumOutline`
   - `id`, `curriculum_version_id`, `items`
 - `LessonPlan`
@@ -82,6 +84,7 @@ Several structured fields are currently stored as JSON strings rather than norma
 
 - `Topic.tags`
 - `Topic.source_section_ids`
+- `Subtopic.source_section_ids`
 - `CurriculumOutline.items`
 - `LessonPlan.objectives`
 - `LessonPlan.timeline`
@@ -211,4 +214,3 @@ npm run build
 3. Replace placeholder slide rendering with schema-validated YAML and a real template renderer.
 4. Add explainable topic clustering before building curriculum diff features further.
 5. Introduce migrations before production-like database use.
-

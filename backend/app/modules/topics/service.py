@@ -4,7 +4,7 @@ import json
 
 from sqlmodel import select
 from sqlalchemy.orm import Session
-from app.core.models import Topic, Section
+from app.core.models import Topic, Section, Subtopic
 from app.core.llm import call_extract_topics
 from app.core.json_utils import serialize_json, deserialize_json
 
@@ -38,6 +38,14 @@ class TopicService:
                 tags=item.get("tags"),
                 source_section_ids=[s.id for s in sections],
             )
+            for position, subtopic_data in enumerate(item.get("subtopics") or []):
+                self.create_subtopic(
+                    topic_id=topic.id,
+                    name=subtopic_data.get("name", "Untitled"),
+                    summary=subtopic_data.get("summary"),
+                    position=position,
+                    source_section_ids=[s.id for s in sections],
+                )
             topics.append(topic)
         return topics
 
@@ -75,6 +83,36 @@ class TopicService:
 
     def get_topic(self, topic_id: int) -> Optional[Topic]:
         return self.db.get(Topic, topic_id)
+
+    def create_subtopic(
+        self,
+        topic_id: int,
+        name: str,
+        summary: Optional[str] = None,
+        position: int = 0,
+        source_section_ids: Optional[List[int]] = None,
+    ) -> Subtopic:
+        subtopic = Subtopic(
+            topic_id=topic_id,
+            name=name,
+            summary=summary,
+            position=position,
+            source_section_ids=serialize_json(source_section_ids),
+        )
+        self.db.add(subtopic)
+        self.db.commit()
+        self.db.refresh(subtopic)
+        logger.info(f"Created subtopic {subtopic.id}: {subtopic.name}")
+        return subtopic
+
+    def get_subtopics(self, topic_id: int) -> List[Subtopic]:
+        return list(
+            self.db.execute(
+                select(Subtopic)
+                .where(Subtopic.topic_id == topic_id)
+                .order_by(Subtopic.position)
+            ).scalars().all()
+        )
 
     def group_by_cluster(self, curriculum_version_id: int) -> dict:
         topics = self.get_topics(curriculum_version_id)

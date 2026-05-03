@@ -27,7 +27,7 @@ def extract_topics(
         request.curriculum_version_id,
         sections,
     )
-    return {"topics": [{"id": t.id, "name": t.name} for t in topics]}
+    return {"topics": [serialize_topic(t, service) for t in topics]}
 
 
 @router.post("/create")
@@ -50,16 +50,7 @@ def list_topics(
     service: TopicService = Depends(get_topic_service),
 ):
     topics = service.get_topics(curriculum_version_id)
-    return [
-        {
-            "id": t.id,
-            "name": t.name,
-            "summary": t.summary,
-            "tags": t.tags,
-            "cluster_id": t.cluster_id,
-        }
-        for t in topics
-    ]
+    return [serialize_topic(t, service, include_details=True) for t in topics]
 
 
 @router.get("/clusters/{curriculum_version_id}")
@@ -72,3 +63,31 @@ def get_clusters(
         cluster_id: [{"id": t.id, "name": t.name} for t in topics]
         for cluster_id, topics in clusters.items()
     }
+
+
+def serialize_topic(
+    topic: Topic,
+    service: TopicService,
+    include_details: bool = False,
+) -> dict:
+    data = {
+        "id": topic.id,
+        "name": topic.name,
+        "subtopics": [
+            {
+                "id": subtopic.id,
+                "name": subtopic.name,
+                "summary": subtopic.summary,
+            }
+            for subtopic in service.get_subtopics(topic.id)
+        ],
+    }
+    if include_details:
+        data.update(
+            {
+                "summary": topic.summary,
+                "tags": topic.tags,
+                "cluster_id": topic.cluster_id,
+            }
+        )
+    return data

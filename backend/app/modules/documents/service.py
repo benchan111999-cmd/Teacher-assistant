@@ -8,7 +8,13 @@ from sqlalchemy import delete
 
 from app.core.config import get_db, get_settings, get_allowed_file_types, get_max_file_size
 from app.core.models import Material, Section, CurriculumVersion
-from app.modules.documents.parsers import parse_material, validate_file_type
+from app.modules.documents.parsers import (
+    OcrRuntimeUnavailable,
+    PdfPasswordInvalid,
+    PdfPasswordRequired,
+    parse_material,
+    validate_file_type,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -24,7 +30,7 @@ class DocumentService:
         self.settings = get_settings()
 
     async def upload_material(
-        self, file: UploadFile, curriculum_version_id: int
+        self, file: UploadFile, curriculum_version_id: int, password: str | None = None
     ) -> Material:
         version = self.db.get(CurriculumVersion, curriculum_version_id)
         if not version:
@@ -68,7 +74,7 @@ class DocumentService:
         self.db.refresh(material)
 
         try:
-            sections = parse_material(file_type, content)
+            sections = parse_material(file_type, content, password=password)
             logger.info(f"Parsed {len(sections) if sections else 0} sections from {file.filename}")
             
             # If no sections, try to at least store the file
@@ -94,6 +100,22 @@ class DocumentService:
             self.db.refresh(material)
             logger.info(f"Successfully processed material {material.id}: {file.filename} (status: {material.status})")
 
+        except (PdfPasswordRequired, PdfPasswordInvalid) as e:
+            logger.error(f"Failed to process material {material.id}: {e}")
+            material.status = "failed"
+            self.db.commit()
+            raise HTTPException(
+                status_code=400,
+                detail=str(e),
+            )
+        except OcrRuntimeUnavailable as e:
+            logger.error(f"Failed to process material {material.id}: {e}")
+            material.status = "needs_review"
+            self.db.commit()
+            raise HTTPException(
+                status_code=400,
+                detail=str(e),
+            )
         except (ValueError, IOError) as e:
             logger.error(f"Failed to process material {material.id}: {e}")
             material.status = "failed"

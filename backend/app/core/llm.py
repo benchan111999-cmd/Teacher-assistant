@@ -56,6 +56,7 @@ For each topic, provide:
 - name: short descriptive name (max 50 chars)
 - summary: brief explanation (max 200 chars)
 - tags: relevant keywords (array of strings)
+- subtopics: optional array of smaller teaching points, each with name and summary
 
 Output as JSON array."""
     content = extract_topics_from_sections_prompt(sections)
@@ -64,7 +65,7 @@ Output as JSON array."""
 {content}
 
 Return ONLY a JSON array like:
-[{{"name": "Topic Name", "summary": "...", "tags": ["tag1", "tag2"]}}]
+[{{"name": "Topic Name", "summary": "...", "tags": ["tag1", "tag2"], "subtopics": [{{"name": "Subtopic", "summary": "..."}}]}}]
 No other text."""
     result = call_llm(prompt, system_prompt=system_prompt, temperature=0.3)
     try:

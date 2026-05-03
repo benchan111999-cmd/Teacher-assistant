@@ -46,6 +46,17 @@ class Topic(SQLModel, table=True):
     cluster_id: Optional[str] = None
 
 
+class Subtopic(SQLModel, table=True):
+    __tablename__ = "subtopics"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    topic_id: int = Field(foreign_key="topics.id")
+    name: str
+    summary: Optional[str] = None
+    position: int = 0
+    source_section_ids: Optional[str] = None
+
+
 class CurriculumOutline(SQLModel, table=True):
     __tablename__ = "curriculum_outlines"
     

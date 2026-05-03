@@ -50,12 +50,19 @@ class TopicCreateRequest(BaseModel):
     tags: Optional[List[str]] = None
 
 
+class SubtopicResponse(BaseModel):
+    id: int
+    name: str
+    summary: Optional[str] = None
+
+
 class TopicResponse(BaseModel):
     id: int
     name: str
     summary: Optional[str] = None
     tags: Optional[str] = None
     cluster_id: Optional[str] = None
+    subtopics: List[SubtopicResponse] = Field(default_factory=list)
 
 
 class TopicListResponse(BaseModel):
