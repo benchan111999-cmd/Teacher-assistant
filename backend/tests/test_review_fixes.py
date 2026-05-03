@@ -44,7 +44,7 @@ def test_slides_generate_endpoint_calls_service_with_lesson_id_only(client, monk
     response = client.post("/slides/generate/123")
 
     assert response.status_code == 200
-    assert response.json() == {"id": 7, "lesson_id": 123}
+    assert response.json() == {"id": 7, "lesson_id": 123, "yaml": "title: Test"}
     assert captured == {"lesson_id": 123}
 
 

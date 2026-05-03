@@ -16,6 +16,16 @@ Teacher-Assistant turns teaching sources and materials into a structured prepara
 
 ## Local Development
 
+Install dependencies first:
+
+```bash
+cd backend
+poetry install
+
+cd ../frontend
+npm install
+```
+
 Backend:
 
 ```bash
@@ -28,6 +38,31 @@ Frontend:
 ```bash
 cd frontend
 npm run dev
+```
+
+## Local Verification
+
+Run the full local verification before handing off changes:
+
+```bash
+bash scripts/verify-local.sh
+```
+
+This runs:
+
+- Backend tests: `cd backend && poetry run pytest`
+- Frontend production build: `cd frontend && npm run build`
+
+For narrower checks while developing:
+
+```bash
+cd backend
+poetry run pytest
+```
+
+```bash
+cd frontend
+npm run build
 ```
 
 ## Work Mode
