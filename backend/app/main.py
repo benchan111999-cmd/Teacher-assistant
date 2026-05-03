@@ -11,6 +11,7 @@ from app.core.models import (
     Material,
     Section,
     Topic,
+    Subtopic,
     CurriculumOutline,
     LessonPlan,
     LessonSlides,

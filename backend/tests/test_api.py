@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
-from app.core.models import CurriculumOutline, CurriculumVersion, LessonPlan, Material, Section, Topic
+from app.core.models import CurriculumOutline, CurriculumVersion, LessonPlan, Material, Section, Subtopic, Topic
 from app.modules.documents.service import DocumentService
 from app.modules.lessons.service import LessonService
 from app.modules.topics.service import TopicService
@@ -113,7 +113,102 @@ def test_extract_topics_accepts_json_body(client, db_session, monkeypatch):
     )
 
     assert response.status_code == 200
-    assert response.json() == {"topics": [{"id": 10, "name": "Fractions"}]}
+    assert response.json() == {"topics": [{"id": 10, "name": "Fractions", "subtopics": []}]}
+
+
+def test_upload_pdf_accepts_password_form_field(client, monkeypatch):
+    version_response = client.post(
+        "/curriculum/version",
+        json={"name": "Protected Curriculum", "year": 2026},
+    )
+    version_id = version_response.json()["id"]
+    captured = {}
+
+    def fake_parse_material(file_type, content, password=None):
+        captured["file_type"] = file_type
+        captured["password"] = password
+        return []
+
+    monkeypatch.setattr("app.modules.documents.service.parse_material", fake_parse_material)
+
+    response = client.post(
+        f"/documents/{version_id}/upload",
+        data={"password": "secret"},
+        files={"file": ("protected.pdf", b"%PDF-1.4 content", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": response.json()["id"],
+        "file_name": "protected.pdf",
+        "status": "needs_review",
+    }
+    assert captured == {"file_type": "pdf", "password": "secret"}
+    assert "secret" not in str(response.json())
+
+
+def test_extract_topics_returns_nested_subtopics(client, db_session, monkeypatch):
+    version = CurriculumVersion(name="Nested Topic Curriculum", year=2026)
+    db_session.add(version)
+    db_session.commit()
+    db_session.refresh(version)
+
+    material = Material(
+        curriculum_version_id=version.id,
+        file_name="lesson.pdf",
+        file_type="pdf",
+        status="parsed",
+    )
+    db_session.add(material)
+    db_session.commit()
+    db_session.refresh(material)
+
+    section = Section(
+        material_id=material.id,
+        title="ECG rhythm",
+        body="Rate assessment and rhythm regularity",
+        position=1,
+    )
+    db_session.add(section)
+    db_session.commit()
+    db_session.refresh(section)
+
+    def fake_call_extract_topics(sections):
+        return [
+            {
+                "name": "ECG Rhythm Assessment",
+                "summary": "Assess ECG rhythm strips.",
+                "tags": ["ecg"],
+                "subtopics": [
+                    {
+                        "name": "Rate assessment",
+                        "summary": "Estimate ventricular rate.",
+                    },
+                    {
+                        "name": "Rhythm regularity",
+                        "summary": "Check R-R interval regularity.",
+                    },
+                ],
+            }
+        ]
+
+    monkeypatch.setattr("app.modules.topics.service.call_extract_topics", fake_call_extract_topics)
+
+    response = client.post(
+        "/topics/extract",
+        json={"curriculum_version_id": version.id, "section_ids": [section.id]},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["topics"][0]["name"] == "ECG Rhythm Assessment"
+    assert [s["name"] for s in data["topics"][0]["subtopics"]] == [
+        "Rate assessment",
+        "Rhythm regularity",
+    ]
+
+    subtopics = db_session.query(Subtopic).all()
+    assert [s.name for s in subtopics] == ["Rate assessment", "Rhythm regularity"]
 
 
 def test_create_topic_accepts_json_body_with_tags(client):

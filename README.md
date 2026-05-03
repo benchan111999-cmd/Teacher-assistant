@@ -26,6 +26,12 @@ cd ../frontend
 npm install
 ```
 
+For OCR on flattened or scanned English PDFs, install the Tesseract runtime on the host:
+
+```bash
+sudo apt-get install tesseract-ocr
+```
+
 Backend:
 
 ```bash

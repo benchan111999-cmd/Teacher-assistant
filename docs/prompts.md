@@ -39,7 +39,13 @@ Expected output shape:
   {
     "name": "Short topic name",
     "summary": "One or two sentence summary grounded in the section text.",
-    "tags": ["tag-one", "tag-two"]
+    "tags": ["tag-one", "tag-two"],
+    "subtopics": [
+      {
+        "name": "Focused subtopic name",
+        "summary": "One sentence summary grounded in the section text."
+      }
+    ]
   }
 ]
 ```
@@ -55,6 +61,7 @@ Rules:
 - Use only the provided section content.
 - Merge duplicate or near-duplicate ideas.
 - Keep topic names short and suitable for a curriculum outline.
+- Include subtopics for smaller teaching points under each main topic when the source text supports them.
 - Write concise summaries.
 - Return valid JSON only.
 
@@ -66,7 +73,13 @@ Return JSON in this exact shape:
   {
     "name": "Short topic name",
     "summary": "Grounded summary.",
-    "tags": ["tag"]
+    "tags": ["tag"],
+    "subtopics": [
+      {
+        "name": "Focused subtopic name",
+        "summary": "Grounded summary."
+      }
+    ]
   }
 ]
 ```
@@ -277,4 +290,3 @@ Before relying on generated content in the UI, add schema validation for:
 - Slide YAML.
 
 Validation failures should return clear errors and should not silently write invalid structured content to the database.
-

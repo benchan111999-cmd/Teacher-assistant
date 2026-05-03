@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Depends, Form, HTTPException
 from sqlmodel import Session, select
 from typing import List
 from app.core.config import get_db
@@ -17,9 +17,10 @@ def get_document_service(db: Session = Depends(get_db)):
 async def upload_material(
     curriculum_version_id: int,
     file: UploadFile = File(...),
+    password: str | None = Form(default=None),
     service: DocumentService = Depends(get_document_service),
 ):
-    material = await service.upload_material(file, curriculum_version_id)
+    material = await service.upload_material(file, curriculum_version_id, password=password)
     return {"id": material.id, "file_name": material.file_name, "status": material.status}
 
 

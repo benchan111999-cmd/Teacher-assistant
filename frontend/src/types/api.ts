@@ -30,11 +30,20 @@ export interface Section {
 
 export interface Topic {
   id: number;
-  curriculum_version_id: number;
+  curriculum_version_id?: number;
   name: string;
   summary?: string;
   tags?: string;
   cluster_id?: string;
+  subtopics?: Subtopic[];
+}
+
+export interface Subtopic {
+  id: number;
+  topic_id?: number;
+  name: string;
+  summary?: string;
+  position?: number;
 }
 
 export interface Lesson {

@@ -1,12 +1,12 @@
-from docx import Document
 import io
+import fitz
 
 from app.modules.lessons import service as lesson_service
 from app.modules.slides import service as slides_service
 from app.modules.topics import service as topic_service
 
 
-def test_minimal_pipeline_from_docx_upload_to_rendered_slides(client, monkeypatch):
+def test_minimal_pipeline_from_password_pdf_upload_to_subtopics_and_slides(client, monkeypatch):
     monkeypatch.setattr(
         topic_service,
         "call_extract_topics",
@@ -15,6 +15,12 @@ def test_minimal_pipeline_from_docx_upload_to_rendered_slides(client, monkeypatc
                 "name": "ECG Rate Assessment",
                 "summary": "Estimate heart rate from ECG rhythm strips.",
                 "tags": ["ecg", "rate"],
+                "subtopics": [
+                    {
+                        "name": "Large box method",
+                        "summary": "Use large boxes between R waves.",
+                    }
+                ],
             }
         ],
     )
@@ -60,11 +66,12 @@ def test_minimal_pipeline_from_docx_upload_to_rendered_slides(client, monkeypatc
 
     upload_response = client.post(
         f"/documents/{version_id}/upload",
+        data={"password": "secret"},
         files={
             "file": (
-                "ecg-intro.docx",
-                _build_docx_bytes(),
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "ecg-intro.pdf",
+                _build_password_pdf_bytes("ECG Rate Assessment\nUse large boxes between R waves.", "secret"),
+                "application/pdf",
             )
         },
     )
@@ -87,7 +94,19 @@ def test_minimal_pipeline_from_docx_upload_to_rendered_slides(client, monkeypatc
     )
     assert extract_response.status_code == 200
     topics = extract_response.json()["topics"]
-    assert topics == [{"id": topics[0]["id"], "name": "ECG Rate Assessment"}]
+    assert topics == [
+        {
+            "id": topics[0]["id"],
+            "name": "ECG Rate Assessment",
+            "subtopics": [
+                {
+                    "id": topics[0]["subtopics"][0]["id"],
+                    "name": "Large box method",
+                    "summary": "Use large boxes between R waves.",
+                }
+            ],
+        }
+    ]
 
     outline_response = client.post(
         "/curriculum/outline",
@@ -129,10 +148,16 @@ def test_minimal_pipeline_from_docx_upload_to_rendered_slides(client, monkeypatc
     assert "Rate check" in render_response.json()["html"]
 
 
-def _build_docx_bytes() -> bytes:
-    document = Document()
-    document.add_heading("ECG Rate Assessment", level=1)
-    document.add_paragraph("Use large boxes between R waves to estimate rate.")
+def _build_password_pdf_bytes(text: str, password: str) -> bytes:
+    document = fitz.open()
+    page = document.new_page()
+    page.insert_text((72, 72), text)
     buffer = io.BytesIO()
-    document.save(buffer)
+    document.save(
+        buffer,
+        encryption=fitz.PDF_ENCRYPT_AES_256,
+        owner_pw=password,
+        user_pw=password,
+    )
+    document.close()
     return buffer.getvalue()
