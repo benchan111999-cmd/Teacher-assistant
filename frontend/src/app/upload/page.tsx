@@ -1,13 +1,21 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import Layout from '@/components/Layout';
 import { Card, Button, Badge, Spinner } from '@/components/ui';
 import { curriculumApi, documentsApi, topicsApi } from '@/lib/api';
-import { Version, Material, Section } from '@/types/api';
+import { Version, Material, Topic } from '@/types/api';
 
 type BadgeVariant = 'success' | 'warning' | 'error' | 'info';
+
+interface ExtractionResult {
+  materialId: number;
+  fileName: string;
+  sectionCount: number;
+  topicCount: number;
+  topics: Topic[];
+  error?: string;
+}
 
 const materialStatusVariant = (status: string): BadgeVariant => {
   if (status === 'parsed') return 'success';
@@ -17,14 +25,21 @@ const materialStatusVariant = (status: string): BadgeVariant => {
 };
 
 export default function UploadPage() {
-  const router = useRouter();
   const [versions, setVersions] = useState<Version[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState<string>('');
+  const [versionStatus, setVersionStatus] = useState<string>('');
+  const [uploadStatus, setUploadStatus] = useState<string>('');
+  const [extractionStatus, setExtractionStatus] = useState<string>('');
+  const [extractionResults, setExtractionResults] = useState<ExtractionResult[]>([]);
   const [extracting, setExtracting] = useState(false);
+  const [newVersionName, setNewVersionName] = useState('');
+  const [newVersionYear, setNewVersionYear] = useState(new Date().getFullYear().toString());
+  const [creatingVersion, setCreatingVersion] = useState(false);
+  const [pdfPassword, setPdfPassword] = useState('');
+  const [pendingDeleteVersionId, setPendingDeleteVersionId] = useState<number | null>(null);
 
   useEffect(() => {
     loadVersions();
@@ -58,17 +73,56 @@ export default function UploadPage() {
   };
 
   const handleCreateVersion = async () => {
-    const name = prompt('Enter curriculum version name:');
-    if (!name) return;
+    const name = newVersionName.trim();
+    const year = parseInt(newVersionYear, 10);
+
+    if (!name) {
+      setVersionStatus('Enter a curriculum version name first.');
+      return;
+    }
+
+    if (Number.isNaN(year)) {
+      setVersionStatus('Enter a valid year.');
+      return;
+    }
     
-    const year = parseInt(prompt('Enter year:') || new Date().getFullYear().toString());
-    
+    setCreatingVersion(true);
+    setVersionStatus('Creating curriculum version...');
+
     try {
       const newVersion = await curriculumApi.createVersion(name, year);
       setVersions([...versions, newVersion]);
       setSelectedVersion(newVersion.id);
-    } catch (error) {
-      console.error('Failed to create version:', error);
+      setNewVersionName('');
+      setPendingDeleteVersionId(null);
+      setVersionStatus(`Created version: ${newVersion.name}`);
+    } catch (error: any) {
+      setVersionStatus(`Error: ${error.message}`);
+    } finally {
+      setCreatingVersion(false);
+    }
+  };
+
+  const handleDeleteSelectedVersion = async () => {
+    if (!selectedVersion) return;
+
+    if (pendingDeleteVersionId !== selectedVersion) {
+      setPendingDeleteVersionId(selectedVersion);
+      setVersionStatus('Click Confirm Delete to remove this version and its materials.');
+      return;
+    }
+
+    try {
+      await curriculumApi.deleteVersion(selectedVersion);
+      const remaining = versions.filter((version) => version.id !== selectedVersion);
+      setVersions(remaining);
+      setSelectedVersion(remaining[0]?.id ?? null);
+      setMaterials([]);
+      setExtractionResults([]);
+      setPendingDeleteVersionId(null);
+      setVersionStatus('Version deleted.');
+    } catch (error: any) {
+      setVersionStatus(`Error: ${error.message}`);
     }
   };
 
@@ -86,19 +140,20 @@ export default function UploadPage() {
     if (files.length === 0 || !selectedVersion) return;
     
     setLoading(true);
-    setStatus(`Uploading ${files.length} file(s)...`);
+    setUploadStatus(`Uploading ${files.length} file(s)...`);
     
     try {
       const uploaded: Material[] = [];
       for (const file of files) {
-        const material = await documentsApi.uploadMaterial(selectedVersion, file);
+        const material = await documentsApi.uploadMaterial(selectedVersion, file, pdfPassword.trim() || undefined);
         uploaded.push(material);
       }
       setMaterials([...materials, ...uploaded]);
       setFiles([]);
-      setStatus(`Uploaded ${uploaded.length} file(s)!`);
+      setPdfPassword('');
+      setUploadStatus(`Uploaded ${uploaded.length} file(s)!`);
     } catch (error: any) {
-      setStatus(`Error: ${error.message}`);
+      setUploadStatus(`Error: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -108,21 +163,56 @@ export default function UploadPage() {
     if (!selectedVersion || materials.length === 0) return;
     
     setExtracting(true);
-    setStatus('Extracting topics from all materials...');
+    setExtractionStatus('Extracting topics from all materials...');
+    setExtractionResults([]);
     
     try {
       let totalTopics = 0;
+      const results: ExtractionResult[] = [];
       for (const material of materials) {
-        const sections = await documentsApi.getSections(material.id);
-        const sectionIds = sections.map(s => s.id);
-        if (sectionIds.length > 0) {
+        try {
+          const sections = await documentsApi.getSections(material.id);
+          const sectionIds = sections.map(s => s.id);
+          if (sectionIds.length === 0) {
+            results.push({
+              materialId: material.id,
+              fileName: material.file_name,
+              sectionCount: 0,
+              topicCount: 0,
+              topics: [],
+              error: 'No parsed sections found.',
+            });
+            continue;
+          }
           const topics = await topicsApi.extractTopics(selectedVersion, sectionIds);
           totalTopics += topics.length;
+          results.push({
+            materialId: material.id,
+            fileName: material.file_name,
+            sectionCount: sectionIds.length,
+            topicCount: topics.length,
+            topics,
+          });
+        } catch (error: any) {
+          results.push({
+            materialId: material.id,
+            fileName: material.file_name,
+            sectionCount: 0,
+            topicCount: 0,
+            topics: [],
+            error: error.message,
+          });
+          break;
         }
       }
-      setStatus(`Extracted ${totalTopics} topics total!`);
+      setExtractionResults(results);
+      setExtractionStatus(
+        results.some((result) => result.error)
+          ? 'Topic extraction stopped with an error.'
+          : `Extracted ${totalTopics} topics total.`
+      );
     } catch (error: any) {
-      setStatus(`Error: ${error.message}`);
+      setExtractionStatus(`Error: ${error.message}`);
     } finally {
       setExtracting(false);
     }
@@ -133,9 +223,9 @@ export default function UploadPage() {
     try {
       await documentsApi.deleteMaterial(id);
       setMaterials(materials.filter(m => m.id !== id));
-      setStatus('Material deleted');
+      setUploadStatus('Material deleted');
     } catch (error: any) {
-      setStatus(`Error: ${error.message}`);
+      setUploadStatus(`Error: ${error.message}`);
     }
   };
 
@@ -150,7 +240,10 @@ export default function UploadPage() {
           ) : (
             <select
               value={selectedVersion?.toString() || ''}
-              onChange={(e) => setSelectedVersion(parseInt(e.target.value))}
+              onChange={(e) => {
+                setSelectedVersion(parseInt(e.target.value));
+                setPendingDeleteVersionId(null);
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-4"
             >
               {versions.map((v) => (
@@ -160,10 +253,39 @@ export default function UploadPage() {
               ))}
             </select>
           )}
+
+          {selectedVersion && (
+            <div className="mb-4">
+              <Button onClick={handleDeleteSelectedVersion} variant="danger">
+                {pendingDeleteVersionId === selectedVersion ? 'Confirm Delete' : 'Delete Selected Version'}
+              </Button>
+            </div>
+          )}
           
-          <Button onClick={handleCreateVersion} variant="secondary">
-            + New Version
-          </Button>
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_7rem_auto] gap-2">
+            <input
+              type="text"
+              value={newVersionName}
+              onChange={(e) => setNewVersionName(e.target.value)}
+              placeholder="Version name"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <input
+              type="number"
+              value={newVersionYear}
+              onChange={(e) => setNewVersionYear(e.target.value)}
+              min="1900"
+              max="2100"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <Button onClick={handleCreateVersion} variant="secondary" disabled={creatingVersion}>
+              {creatingVersion ? <Spinner size="sm" /> : '+ New Version'}
+            </Button>
+          </div>
+
+          {versionStatus && (
+            <p className="mt-4 text-sm text-gray-600">{versionStatus}</p>
+          )}
         </Card>
 
         <Card className="p-6">
@@ -197,6 +319,19 @@ export default function UploadPage() {
               ))}
             </div>
           )}
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              PDF password
+            </label>
+            <input
+              type="password"
+              value={pdfPassword}
+              onChange={(e) => setPdfPassword(e.target.value)}
+              placeholder="Optional, used for protected PDFs"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
           
           <div className="flex gap-2">
             <Button 
@@ -208,8 +343,8 @@ export default function UploadPage() {
             </Button>
           </div>
           
-          {status && (
-            <p className="mt-4 text-sm text-center text-gray-600">{status}</p>
+          {uploadStatus && (
+            <p className="mt-4 text-sm text-center text-gray-600">{uploadStatus}</p>
           )}
         </Card>
 
@@ -224,12 +359,13 @@ export default function UploadPage() {
           ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {materials.map((m) => (
-                <div key={m.id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                  <span className="text-sm truncate">{m.file_name}</span>
+                <div key={m.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 items-start p-2 bg-gray-50 rounded">
+                  <span className="text-sm break-words" title={m.file_name}>{m.file_name}</span>
                   <div className="flex items-center gap-2">
                     <Badge variant={materialStatusVariant(m.status)}>
                       {m.status}
                     </Badge>
+                  </div>
                     <button
                       onClick={() => handleDeleteMaterial(m.id)}
                       className="text-red-500 hover:text-red-700 text-xs px-2 py-1 rounded hover:bg-red-50"
@@ -237,7 +373,6 @@ export default function UploadPage() {
                     >
                       Delete
                     </button>
-                  </div>
                 </div>
               ))}
             </div>
@@ -262,6 +397,39 @@ export default function UploadPage() {
           <p className="text-sm text-gray-500 mt-2">
             {materials.length} material(s) ready for extraction.
           </p>
+
+          {extractionStatus && (
+            <p className="mt-4 text-sm text-gray-600">{extractionStatus}</p>
+          )}
+
+          {extractionResults.length > 0 && (
+            <div className="mt-4 space-y-2 max-h-80 overflow-y-auto">
+              {extractionResults.map((result) => (
+                <div key={result.materialId} className="rounded-lg bg-gray-50 p-3 text-sm">
+                  <div className="font-medium text-gray-900 break-words">{result.fileName}</div>
+                  <div className="mt-1 text-gray-600">
+                    {result.sectionCount} section(s), {result.topicCount} topic(s)
+                  </div>
+                  {result.error ? (
+                    <div className="mt-2 text-red-600">{result.error}</div>
+                  ) : result.topics.length > 0 ? (
+                    <ul className="mt-2 list-disc pl-5 text-gray-700">
+                      {result.topics.map((topic) => (
+                        <li key={topic.id}>
+                          {topic.name}
+                          {topic.subtopics && topic.subtopics.length > 0 && (
+                            <span className="text-gray-500"> ({topic.subtopics.length} subtopic(s))</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="mt-2 text-gray-500">No topics returned.</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       </div>
     </Layout>

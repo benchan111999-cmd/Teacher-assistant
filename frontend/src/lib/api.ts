@@ -26,6 +26,10 @@ export const curriculumApi = {
     return res.data;
   },
 
+  deleteVersion: async (id: number): Promise<void> => {
+    await apiClient.delete(`/curriculum/version/${id}`);
+  },
+
   createOutline: async (curriculumVersionId: number, items: object[]): Promise<Outline> => {
     const res = await apiClient.post('/curriculum/outline', {
       curriculum_version_id: curriculumVersionId,
@@ -61,9 +65,12 @@ export const curriculumApi = {
 };
 
 export const documentsApi = {
-  uploadMaterial: async (curriculumVersionId: number, file: File): Promise<Material> => {
+  uploadMaterial: async (curriculumVersionId: number, file: File, password?: string): Promise<Material> => {
     const formData = new FormData();
     formData.append('file', file);
+    if (password) {
+      formData.append('password', password);
+    }
     const res = await apiClient.post(`/documents/${curriculumVersionId}/upload`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });

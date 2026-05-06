@@ -1,7 +1,16 @@
 import pytest
 from fastapi import HTTPException
 
-from app.core.models import CurriculumOutline, CurriculumVersion, LessonPlan, Material, Section, Subtopic, Topic
+from app.core.models import (
+    CurriculumOutline,
+    CurriculumVersion,
+    LessonPlan,
+    LessonSlides,
+    Material,
+    Section,
+    Subtopic,
+    Topic,
+)
 from app.modules.documents.service import DocumentService
 from app.modules.lessons.service import LessonService
 from app.modules.topics.service import TopicService
@@ -114,6 +123,98 @@ def test_extract_topics_accepts_json_body(client, db_session, monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == {"topics": [{"id": 10, "name": "Fractions", "subtopics": []}]}
+
+
+def test_extract_topics_returns_service_error(client, db_session, monkeypatch):
+    version = CurriculumVersion(name="Topic Curriculum", year=2025)
+    db_session.add(version)
+    db_session.commit()
+    db_session.refresh(version)
+
+    material = Material(
+        curriculum_version_id=version.id,
+        file_name="lesson.pdf",
+        file_type="pdf",
+        status="parsed",
+    )
+    db_session.add(material)
+    db_session.commit()
+    db_session.refresh(material)
+
+    section = Section(
+        material_id=material.id,
+        title="Fractions",
+        body="Equivalent fractions",
+        position=1,
+    )
+    db_session.add(section)
+    db_session.commit()
+    db_session.refresh(section)
+
+    def fake_extract(self, curriculum_version_id, sections):
+        raise RuntimeError("Topic extraction failed: OPENAI_API_KEY not configured")
+
+    monkeypatch.setattr(TopicService, "extract_topics_from_sections", fake_extract)
+
+    response = client.post(
+        "/topics/extract",
+        json={"curriculum_version_id": version.id, "section_ids": [section.id]},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Topic extraction failed: OPENAI_API_KEY not configured"
+
+
+def test_delete_curriculum_version_removes_related_records(client, db_session):
+    version = CurriculumVersion(name="Disposable", year=2025)
+    db_session.add(version)
+    db_session.commit()
+    db_session.refresh(version)
+
+    material = Material(curriculum_version_id=version.id, file_name="lesson.pdf", file_type="pdf", status="parsed")
+    topic = Topic(curriculum_version_id=version.id, name="ECG")
+    outline = CurriculumOutline(curriculum_version_id=version.id, items="[]")
+    db_session.add(material)
+    db_session.add(topic)
+    db_session.add(outline)
+    db_session.commit()
+    db_session.refresh(material)
+    db_session.refresh(topic)
+    db_session.refresh(outline)
+
+    section = Section(material_id=material.id, title="Intro", body="Body", position=0)
+    subtopic = Subtopic(topic_id=topic.id, name="Rate")
+    lesson = LessonPlan(outline_id=outline.id, title="Lesson")
+    db_session.add(section)
+    db_session.add(subtopic)
+    db_session.add(lesson)
+    db_session.commit()
+    db_session.refresh(lesson)
+
+    slides = LessonSlides(lesson_id=lesson.id, yaml="title: Lesson")
+    db_session.add(slides)
+    db_session.commit()
+    version_id = version.id
+    material_id = material.id
+    section_id = section.id
+    topic_id = topic.id
+    subtopic_id = subtopic.id
+    outline_id = outline.id
+    lesson_id = lesson.id
+    slides_id = slides.id
+
+    response = client.delete(f"/curriculum/version/{version_id}")
+
+    assert response.status_code == 200
+    db_session.expire_all()
+    assert db_session.get(CurriculumVersion, version_id) is None
+    assert db_session.get(Material, material_id) is None
+    assert db_session.get(Section, section_id) is None
+    assert db_session.get(Topic, topic_id) is None
+    assert db_session.get(Subtopic, subtopic_id) is None
+    assert db_session.get(CurriculumOutline, outline_id) is None
+    assert db_session.get(LessonPlan, lesson_id) is None
+    assert db_session.get(LessonSlides, slides_id) is None
 
 
 def test_upload_pdf_accepts_password_form_field(client, monkeypatch):

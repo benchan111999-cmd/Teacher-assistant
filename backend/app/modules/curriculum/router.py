@@ -66,6 +66,16 @@ def get_version(
     )
 
 
+@router.delete("/version/{version_id}")
+def delete_version(
+    version_id: int,
+    service: CurriculumService = Depends(get_curriculum_service),
+):
+    if not service.delete_version(version_id):
+        raise HTTPException(status_code=404, detail="Version not found")
+    return {"message": "Version deleted successfully"}
+
+
 @router.post("/outline", response_model=OutlineResponse)
 def create_outline(
     request: OutlineCreateRequest,

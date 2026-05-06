@@ -27,7 +27,7 @@ class TopicService:
             extracted = call_extract_topics(section_dicts)
         except Exception as e:
             logger.error(f"LLM extraction error: {e}")
-            extracted = []
+            raise RuntimeError(f"Topic extraction failed: {e}") from e
         
         topics = []
         for item in extracted:

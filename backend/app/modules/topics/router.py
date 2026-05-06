@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 from app.core.config import get_db
 from app.core.models import Topic, Section
@@ -23,10 +23,13 @@ def extract_topics(
         section = service.db.get(Section, sid)
         if section:
             sections.append(section)
-    topics = service.extract_topics_from_sections(
-        request.curriculum_version_id,
-        sections,
-    )
+    try:
+        topics = service.extract_topics_from_sections(
+            request.curriculum_version_id,
+            sections,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     return {"topics": [serialize_topic(t, service) for t in topics]}
 
 

@@ -3,7 +3,16 @@ from typing import List, Optional
 
 from sqlmodel import select
 from sqlalchemy.orm import Session
-from app.core.models import CurriculumVersion, CurriculumOutline, Topic
+from app.core.models import (
+    CurriculumVersion,
+    CurriculumOutline,
+    LessonPlan,
+    LessonSlides,
+    Material,
+    Section,
+    Subtopic,
+    Topic,
+)
 from app.core.llm import call_suggest_outline
 from app.core.json_utils import serialize_json, deserialize_json
 
@@ -28,6 +37,70 @@ class CurriculumService:
 
     def list_versions(self) -> List[CurriculumVersion]:
         return list(self.db.execute(select(CurriculumVersion)).scalars().all())
+
+    def delete_version(self, version_id: int) -> bool:
+        version = self.db.get(CurriculumVersion, version_id)
+        if not version:
+            return False
+
+        outlines = list(
+            self.db.execute(
+                select(CurriculumOutline).where(
+                    CurriculumOutline.curriculum_version_id == version_id
+                )
+            ).scalars().all()
+        )
+        for outline in outlines:
+            lessons = list(
+                self.db.execute(
+                    select(LessonPlan).where(LessonPlan.outline_id == outline.id)
+                ).scalars().all()
+            )
+            for lesson in lessons:
+                slides = list(
+                    self.db.execute(
+                        select(LessonSlides).where(LessonSlides.lesson_id == lesson.id)
+                    ).scalars().all()
+                )
+                for slide in slides:
+                    self.db.delete(slide)
+                self.db.delete(lesson)
+            self.db.delete(outline)
+
+        topics = list(
+            self.db.execute(
+                select(Topic).where(Topic.curriculum_version_id == version_id)
+            ).scalars().all()
+        )
+        for topic in topics:
+            subtopics = list(
+                self.db.execute(
+                    select(Subtopic).where(Subtopic.topic_id == topic.id)
+                ).scalars().all()
+            )
+            for subtopic in subtopics:
+                self.db.delete(subtopic)
+            self.db.delete(topic)
+
+        materials = list(
+            self.db.execute(
+                select(Material).where(Material.curriculum_version_id == version_id)
+            ).scalars().all()
+        )
+        for material in materials:
+            sections = list(
+                self.db.execute(
+                    select(Section).where(Section.material_id == material.id)
+                ).scalars().all()
+            )
+            for section in sections:
+                self.db.delete(section)
+            self.db.delete(material)
+
+        self.db.delete(version)
+        self.db.commit()
+        logger.info(f"Deleted curriculum version {version_id}")
+        return True
 
     def create_outline(
         self, curriculum_version_id: int, items: List[dict]
