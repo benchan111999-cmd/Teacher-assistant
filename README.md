@@ -46,6 +46,8 @@ cd frontend
 npm run dev
 ```
 
+The frontend defaults to `http://127.0.0.1:8000` for the backend. If your local backend uses another port, set `NEXT_PUBLIC_API_URL` in an untracked `frontend/.env.local`.
+
 ## Local Verification
 
 Run the full local verification before handing off changes:
