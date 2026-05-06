@@ -1,40 +1,36 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/Layout';
 import { Card, Button, Badge, Spinner } from '@/components/ui';
 import { curriculumApi } from '@/lib/api';
-import { Version, Outline } from '@/types/api';
+import { CurriculumDiff, Outline, OutlineItem, Version } from '@/types/api';
 
 export default function CurriculumPage() {
   const [versions, setVersions] = useState<Version[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [outlines, setOutlines] = useState<Outline[]>([]);
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState('');
+  const [diffVersionAId, setDiffVersionAId] = useState<number | null>(null);
+  const [diffVersionBId, setDiffVersionBId] = useState<number | null>(null);
+  const [diffResult, setDiffResult] = useState<CurriculumDiff | null>(null);
 
-  useEffect(() => {
-    loadVersions();
-  }, []);
-
-  useEffect(() => {
-    if (selectedVersion) {
-      loadOutlines();
-    }
-  }, [selectedVersion]);
-
-  const loadVersions = async () => {
+  const loadVersions = useCallback(async () => {
     try {
       const data = await curriculumApi.listVersions();
       setVersions(data);
       if (data.length > 0) {
         setSelectedVersion(data[0].id);
+        setDiffVersionAId(data[0].id);
+        setDiffVersionBId(data[1]?.id ?? data[0].id);
       }
     } catch (error) {
       console.error('Failed to load versions:', error);
     }
-  };
+  }, []);
 
-  const loadOutlines = async () => {
+  const loadOutlines = useCallback(async () => {
     if (!selectedVersion) return;
     setLoading(true);
     try {
@@ -46,47 +42,57 @@ export default function CurriculumPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedVersion]);
+
+  useEffect(() => {
+    loadVersions();
+  }, [loadVersions]);
+
+  useEffect(() => {
+    if (selectedVersion) {
+      loadOutlines();
+    }
+  }, [selectedVersion, loadOutlines]);
 
   const handleCreateOutline = async () => {
     if (!selectedVersion) return;
-    
-    if (!confirm('Generate AI-suggested outline?')) return;
-    
+
     setLoading(true);
+    setStatus('Generating AI-suggested outline...');
     try {
       const data = await curriculumApi.suggestOutline(selectedVersion);
       const outline = await curriculumApi.createOutline(selectedVersion, data.items || []);
       setOutlines([...outlines, outline]);
+      setStatus('Outline created.');
     } catch (error) {
       console.error('Failed to create outline:', error);
+      setStatus('Failed to create outline.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleDiff = async () => {
-    const versionAId = parseInt(prompt('Enter first version ID:') || '0');
-    const versionBId = parseInt(prompt('Enter second version ID:') || '0');
-    
-    if (!versionAId || !versionBId) return;
-    
+    if (!diffVersionAId || !diffVersionBId) {
+      setStatus('Select two versions to compare.');
+      return;
+    }
+
     try {
-      const diff = await curriculumApi.diffVersions(versionAId, versionBId);
-      alert(
-        `Common: ${diff.common.length}\n` +
-        `Unique to A: ${diff.unique_to_version_a.length}\n` +
-        `Unique to B: ${diff.unique_to_version_b.length}`
-      );
+      const diff = await curriculumApi.diffVersions(diffVersionAId, diffVersionBId);
+      setDiffResult(diff);
+      setStatus('Version comparison complete.');
     } catch (error) {
       console.error('Failed to diff versions:', error);
+      setStatus('Failed to compare versions.');
     }
   };
 
-  const parseItems = (itemsStr?: string): any[] => {
+  const parseItems = (itemsStr?: string): OutlineItem[] => {
     if (!itemsStr) return [];
     try {
-      return JSON.parse(itemsStr);
+      const parsed = JSON.parse(itemsStr);
+      return Array.isArray(parsed) ? parsed : [];
     } catch {
       return [];
     }
@@ -117,10 +123,48 @@ export default function CurriculumPage() {
           <Button onClick={handleCreateOutline} variant="secondary" className="mt-4 w-full">
             + AI Suggest Outline
           </Button>
-          
+
+          <div className="mt-6 space-y-2">
+            <h4 className="text-sm font-medium text-gray-700">Compare Versions</h4>
+            <select
+              value={diffVersionAId?.toString() || ''}
+              onChange={(e) => setDiffVersionAId(parseInt(e.target.value))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            >
+              {versions.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name} ({v.year})
+                </option>
+              ))}
+            </select>
+            <select
+              value={diffVersionBId?.toString() || ''}
+              onChange={(e) => setDiffVersionBId(parseInt(e.target.value))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            >
+              {versions.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name} ({v.year})
+                </option>
+              ))}
+            </select>
+          </div>
+
           <Button onClick={handleDiff} variant="danger" className="mt-2 w-full">
             Compare Versions
           </Button>
+
+          {status && (
+            <p className="mt-4 text-sm text-gray-600">{status}</p>
+          )}
+
+          {diffResult && (
+            <div className="mt-4 rounded-lg bg-gray-50 p-3 text-sm text-gray-700">
+              <div>Common: {diffResult.common.length}</div>
+              <div>Unique to A: {diffResult.unique_to_version_a.length}</div>
+              <div>Unique to B: {diffResult.unique_to_version_b.length}</div>
+            </div>
+          )}
         </Card>
 
         <Card className="p-6 col-span-2">
@@ -138,7 +182,7 @@ export default function CurriculumPage() {
                     {parseItems(outline.items).length} items
                   </p>
                   <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {parseItems(outline.items).map((item: any, index: number) => (
+                    {parseItems(outline.items).map((item, index) => (
                       <div
                         key={index}
                         className="p-3 bg-gray-50 rounded-lg flex items-center gap-2"

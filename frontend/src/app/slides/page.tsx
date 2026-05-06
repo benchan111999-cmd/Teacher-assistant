@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Layout from '@/components/Layout';
 import { Card, Button, Spinner } from '@/components/ui';
 import { curriculumApi, lessonsApi, slidesApi } from '@/lib/api';
@@ -11,20 +11,10 @@ export default function SlidesPage() {
   const [selectedLesson, setSelectedLesson] = useState<number | null>(null);
   const [slides, setSlides] = useState<Slides | null>(null);
   const [loading, setLoading] = useState(false);
+  const [draftYaml, setDraftYaml] = useState('');
+  const [status, setStatus] = useState('');
 
-  useEffect(() => {
-    loadLessons();
-  }, []);
-
-  useEffect(() => {
-    if (selectedLesson) {
-      loadSlides(selectedLesson);
-    } else {
-      setSlides(null);
-    }
-  }, [selectedLesson]);
-
-  const loadLessons = async () => {
+  const loadLessons = useCallback(async () => {
     try {
       const versions = await curriculumApi.listVersions();
       const outlineGroups = await Promise.all(
@@ -35,33 +25,65 @@ export default function SlidesPage() {
       );
       const allLessons = lessonGroups.flat();
       setLessons(allLessons);
-      if (allLessons.length > 0 && !selectedLesson) {
-        setSelectedLesson(allLessons[0].id);
-      }
+      setSelectedLesson((current) => current ?? allLessons[0]?.id ?? null);
     } catch (error) {
       console.error('Failed to load lessons:', error);
       setLessons([]);
     }
-  };
+  }, []);
 
-  const loadSlides = async (lessonId: number) => {
+  const loadSlides = useCallback(async (lessonId: number) => {
     try {
       const data = await slidesApi.getSlides(lessonId);
       setSlides(data);
+      setDraftYaml(data.yaml || '');
     } catch {
       setSlides(null);
+      setDraftYaml('');
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadLessons();
+  }, [loadLessons]);
+
+  useEffect(() => {
+    if (selectedLesson) {
+      loadSlides(selectedLesson);
+    } else {
+      setSlides(null);
+    }
+  }, [selectedLesson, loadSlides]);
 
   const handleGenerateSlides = async () => {
     if (!selectedLesson) return;
     
     setLoading(true);
+    setStatus('Generating slides...');
     try {
       const data = await slidesApi.generateSlides(selectedLesson);
       setSlides(data);
-    } catch (error: any) {
-      alert(`Error: ${error.response?.data?.detail || error.message}`);
+      setDraftYaml(data.yaml || '');
+      setStatus('Slides generated.');
+    } catch (error) {
+      setStatus(error instanceof Error ? `Error: ${error.message}` : 'Error: Failed to generate slides.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveYaml = async () => {
+    if (!selectedLesson) return;
+
+    setLoading(true);
+    setStatus('Saving YAML...');
+    try {
+      const data = await slidesApi.setYaml(selectedLesson, draftYaml);
+      setSlides(data);
+      setDraftYaml(data.yaml || '');
+      setStatus('YAML saved.');
+    } catch (error) {
+      setStatus(error instanceof Error ? `Error: ${error.message}` : 'Error: Failed to save YAML.');
     } finally {
       setLoading(false);
     }
@@ -71,29 +93,21 @@ export default function SlidesPage() {
     if (!selectedLesson) return;
     
     setLoading(true);
+    setStatus('Rendering HTML preview...');
     try {
       const data = await slidesApi.renderHtml(selectedLesson);
       setSlides(data);
+      setDraftYaml(data.yaml || '');
       
       if (data.html) {
         const newWindow = window.open('', '_blank');
         newWindow?.document.write(data.html);
       }
-    } catch (error: any) {
-      alert(`Error: ${error.response?.data?.detail || error.message}`);
+      setStatus('HTML preview rendered.');
+    } catch (error) {
+      setStatus(error instanceof Error ? `Error: ${error.message}` : 'Error: Failed to render HTML preview.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleYamlChange = async (yaml: string) => {
-    if (!selectedLesson || !yaml) return;
-    
-    try {
-      const data = await slidesApi.setYaml(selectedLesson, yaml);
-      setSlides(data);
-    } catch (error) {
-      console.error('Failed to save YAML:', error);
     }
   };
 
@@ -124,20 +138,33 @@ export default function SlidesPage() {
           
           <Button 
             onClick={handleGenerateSlides} 
-            disabled={!selectedLesson}
+            disabled={!selectedLesson || loading}
             className="mt-4 w-full"
           >
             Generate Slides
           </Button>
+
+          <Button 
+            onClick={handleSaveYaml} 
+            disabled={!selectedLesson || loading || !draftYaml}
+            variant="secondary"
+            className="mt-2 w-full"
+          >
+            Save YAML
+          </Button>
           
           <Button 
             onClick={handleRenderHtml} 
-            disabled={!selectedLesson || !slides?.yaml}
+            disabled={!selectedLesson || loading || !slides?.yaml}
             variant="secondary"
             className="mt-2 w-full"
           >
             Preview HTML
           </Button>
+
+          {status && (
+            <p className="mt-4 text-sm text-gray-600">{status}</p>
+          )}
         </Card>
 
         <Card className="p-6 col-span-2">
@@ -153,8 +180,8 @@ export default function SlidesPage() {
             </p>
           ) : (
             <textarea
-              value={slides.yaml || ''}
-              onChange={(e) => handleYamlChange(e.target.value)}
+              value={draftYaml}
+              onChange={(e) => setDraftYaml(e.target.value)}
               className="w-full h-96 px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm"
               placeholder="YAML content will appear here..."
             />
@@ -171,7 +198,7 @@ export default function SlidesPage() {
             />
           ) : (
             <p className="text-gray-500 text-center py-8">
-              Click "Preview HTML" to see the rendered slides.
+              Click Preview HTML to see the rendered slides.
             </p>
           )}
         </Card>

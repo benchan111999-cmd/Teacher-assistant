@@ -11,6 +11,22 @@ export interface Outline {
   items: string;
 }
 
+export interface OutlineItem {
+  type?: string;
+  title?: string;
+  topic_id?: number;
+}
+
+export interface SuggestedOutline {
+  items?: OutlineItem[];
+}
+
+export interface CurriculumDiff {
+  common: Topic[];
+  unique_to_version_a: Topic[];
+  unique_to_version_b: Topic[];
+}
+
 export interface Material {
   id: number;
   curriculum_version_id: number;
@@ -53,6 +69,11 @@ export interface Lesson {
   objectives?: string;
   timeline?: string;
   topics?: string;
+}
+
+export interface LessonTimelineItem {
+  time?: string;
+  activity?: string;
 }
 
 export interface Slides {

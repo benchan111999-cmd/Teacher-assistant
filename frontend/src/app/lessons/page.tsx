@@ -1,28 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/Layout';
 import { Card, Button, Badge, Spinner } from '@/components/ui';
 import { curriculumApi, lessonsApi } from '@/lib/api';
-import { Lesson, Outline } from '@/types/api';
+import { Lesson, LessonTimelineItem, Outline } from '@/types/api';
 
 export default function LessonsPage() {
   const [outlines, setOutlines] = useState<Outline[]>([]);
   const [selectedOutline, setSelectedOutline] = useState<number | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(false);
+  const [lessonTitle, setLessonTitle] = useState('');
+  const [status, setStatus] = useState('');
 
-  useEffect(() => {
-    loadOutlines();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOutline) {
-      loadLessons(selectedOutline);
-    }
-  }, [selectedOutline]);
-
-  const loadOutlines = async () => {
+  const loadOutlines = useCallback(async () => {
     try {
       const versions = await curriculumApi.listVersions();
       const outlineGroups = await Promise.all(
@@ -30,16 +22,14 @@ export default function LessonsPage() {
       );
       const allOutlines = outlineGroups.flat();
       setOutlines(allOutlines);
-      if (allOutlines.length > 0 && !selectedOutline) {
-        setSelectedOutline(allOutlines[0].id);
-      }
+      setSelectedOutline((current) => current ?? allOutlines[0]?.id ?? null);
     } catch (error) {
       console.error('Failed to load outlines:', error);
       setOutlines([]);
     }
-  };
+  }, []);
 
-  const loadLessons = async (outlineId: number) => {
+  const loadLessons = useCallback(async (outlineId: number) => {
     setLoading(true);
     try {
       const data = await lessonsApi.listLessons(outlineId);
@@ -50,31 +40,55 @@ export default function LessonsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadOutlines();
+  }, [loadOutlines]);
+
+  useEffect(() => {
+    if (selectedOutline) {
+      loadLessons(selectedOutline);
+    }
+  }, [selectedOutline, loadLessons]);
 
   const handleGenerate = async () => {
     if (!selectedOutline) return;
-    
-    const title = prompt('Enter lesson title:');
+
+    const title = lessonTitle.trim();
     if (!title) return;
     
     setLoading(true);
+    setStatus('Generating lesson plan...');
     try {
       const lesson = await lessonsApi.generateLesson(selectedOutline, title);
       setLessons([...lessons, lesson]);
-    } catch (error: any) {
-      alert(`Error: ${error.response?.data?.detail || error.message}`);
+      setLessonTitle('');
+      setStatus('Lesson plan generated.');
+    } catch (error) {
+      setStatus(error instanceof Error ? `Error: ${error.message}` : 'Error: Failed to generate lesson plan.');
     } finally {
       setLoading(false);
     }
   };
 
-  const parseJson = (jsonStr?: string): any => {
-    if (!jsonStr) return null;
+  const parseStringArray = (jsonStr?: string): string[] => {
+    if (!jsonStr) return [];
     try {
-      return JSON.parse(jsonStr);
+      const parsed = JSON.parse(jsonStr);
+      return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
     } catch {
-      return null;
+      return [];
+    }
+  };
+
+  const parseTimeline = (jsonStr?: string): LessonTimelineItem[] => {
+    if (!jsonStr) return [];
+    try {
+      const parsed = JSON.parse(jsonStr);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
     }
   };
 
@@ -101,14 +115,26 @@ export default function LessonsPage() {
               ))}
             </select>
           )}
+
+          <input
+            type="text"
+            value={lessonTitle}
+            onChange={(e) => setLessonTitle(e.target.value)}
+            placeholder="Lesson title"
+            className="mt-4 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
           
           <Button 
             onClick={handleGenerate} 
-            disabled={!selectedOutline}
+            disabled={!selectedOutline || !lessonTitle.trim() || loading}
             className="mt-4 w-full"
           >
             + Generate Lesson Plan
           </Button>
+
+          {status && (
+            <p className="mt-4 text-sm text-gray-600">{status}</p>
+          )}
         </Card>
 
         <Card className="p-6 col-span-2">
@@ -125,8 +151,8 @@ export default function LessonsPage() {
           ) : (
             <div className="space-y-4">
               {lessons.map((lesson) => {
-                const objectives = parseJson(lesson.objectives);
-                const timeline = parseJson(lesson.timeline);
+                const objectives = parseStringArray(lesson.objectives);
+                const timeline = parseTimeline(lesson.timeline);
                 
                 return (
                   <div
@@ -155,7 +181,7 @@ export default function LessonsPage() {
                       <div className="mt-3">
                         <p className="text-sm font-medium text-gray-600">Timeline:</p>
                         <div className="mt-1 space-y-1">
-                          {timeline.map((item: any, i: number) => (
+                          {timeline.map((item, i) => (
                             <div key={i} className="text-sm">
                               <span className="text-gray-500">{item.time}:</span> {item.activity}
                             </div>

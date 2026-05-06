@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/Layout';
 import { Card, Button, Badge, Spinner } from '@/components/ui';
 import { curriculumApi, documentsApi, topicsApi } from '@/lib/api';
@@ -24,6 +24,10 @@ const materialStatusVariant = (status: string): BadgeVariant => {
   return 'info';
 };
 
+const errorMessage = (error: unknown): string => (
+  error instanceof Error ? error.message : 'Unknown error'
+);
+
 export default function UploadPage() {
   const [versions, setVersions] = useState<Version[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
@@ -40,37 +44,36 @@ export default function UploadPage() {
   const [creatingVersion, setCreatingVersion] = useState(false);
   const [pdfPassword, setPdfPassword] = useState('');
   const [pendingDeleteVersionId, setPendingDeleteVersionId] = useState<number | null>(null);
+  const [pendingDeleteMaterialId, setPendingDeleteMaterialId] = useState<number | null>(null);
 
-  useEffect(() => {
-    loadVersions();
-  }, []);
-
-  useEffect(() => {
-    if (selectedVersion) {
-      loadMaterials(selectedVersion);
-    }
-  }, [selectedVersion]);
-
-  const loadVersions = async () => {
+  const loadVersions = useCallback(async () => {
     try {
       const data = await curriculumApi.listVersions();
       setVersions(data);
-      if (data.length > 0 && !selectedVersion) {
-        setSelectedVersion(data[0].id);
-      }
+      setSelectedVersion((current) => current ?? data[0]?.id ?? null);
     } catch (error) {
       console.error('Failed to load versions:', error);
     }
-  };
+  }, []);
 
-  const loadMaterials = async (versionId: number) => {
+  const loadMaterials = useCallback(async (versionId: number) => {
     try {
       const data = await documentsApi.listMaterials(versionId);
       setMaterials(data);
     } catch (error) {
       console.error('Failed to load materials:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadVersions();
+  }, [loadVersions]);
+
+  useEffect(() => {
+    if (selectedVersion) {
+      loadMaterials(selectedVersion);
+    }
+  }, [selectedVersion, loadMaterials]);
 
   const handleCreateVersion = async () => {
     const name = newVersionName.trim();
@@ -95,9 +98,10 @@ export default function UploadPage() {
       setSelectedVersion(newVersion.id);
       setNewVersionName('');
       setPendingDeleteVersionId(null);
+      setPendingDeleteMaterialId(null);
       setVersionStatus(`Created version: ${newVersion.name}`);
-    } catch (error: any) {
-      setVersionStatus(`Error: ${error.message}`);
+    } catch (error) {
+      setVersionStatus(`Error: ${errorMessage(error)}`);
     } finally {
       setCreatingVersion(false);
     }
@@ -120,9 +124,10 @@ export default function UploadPage() {
       setMaterials([]);
       setExtractionResults([]);
       setPendingDeleteVersionId(null);
+      setPendingDeleteMaterialId(null);
       setVersionStatus('Version deleted.');
-    } catch (error: any) {
-      setVersionStatus(`Error: ${error.message}`);
+    } catch (error) {
+      setVersionStatus(`Error: ${errorMessage(error)}`);
     }
   };
 
@@ -152,8 +157,8 @@ export default function UploadPage() {
       setFiles([]);
       setPdfPassword('');
       setUploadStatus(`Uploaded ${uploaded.length} file(s)!`);
-    } catch (error: any) {
-      setUploadStatus(`Error: ${error.message}`);
+    } catch (error) {
+      setUploadStatus(`Error: ${errorMessage(error)}`);
     } finally {
       setLoading(false);
     }
@@ -193,14 +198,14 @@ export default function UploadPage() {
             topicCount: topics.length,
             topics,
           });
-        } catch (error: any) {
+        } catch (error) {
           results.push({
             materialId: material.id,
             fileName: material.file_name,
             sectionCount: 0,
             topicCount: 0,
             topics: [],
-            error: error.message,
+            error: errorMessage(error),
           });
           break;
         }
@@ -211,21 +216,27 @@ export default function UploadPage() {
           ? 'Topic extraction stopped with an error.'
           : `Extracted ${totalTopics} topics total.`
       );
-    } catch (error: any) {
-      setExtractionStatus(`Error: ${error.message}`);
+    } catch (error) {
+      setExtractionStatus(`Error: ${errorMessage(error)}`);
     } finally {
       setExtracting(false);
     }
   };
 
   const handleDeleteMaterial = async (id: number) => {
-    if (!confirm('Delete this material?')) return;
+    if (pendingDeleteMaterialId !== id) {
+      setPendingDeleteMaterialId(id);
+      setUploadStatus('Click Confirm Delete to remove this material.');
+      return;
+    }
+
     try {
       await documentsApi.deleteMaterial(id);
       setMaterials(materials.filter(m => m.id !== id));
+      setPendingDeleteMaterialId(null);
       setUploadStatus('Material deleted');
-    } catch (error: any) {
-      setUploadStatus(`Error: ${error.message}`);
+    } catch (error) {
+      setUploadStatus(`Error: ${errorMessage(error)}`);
     }
   };
 
@@ -366,13 +377,26 @@ export default function UploadPage() {
                       {m.status}
                     </Badge>
                   </div>
+                  <div className="flex items-center gap-1">
                     <button
                       onClick={() => handleDeleteMaterial(m.id)}
                       className="text-red-500 hover:text-red-700 text-xs px-2 py-1 rounded hover:bg-red-50"
                       title="Delete material"
                     >
-                      Delete
+                      {pendingDeleteMaterialId === m.id ? 'Confirm Delete' : 'Delete'}
                     </button>
+                    {pendingDeleteMaterialId === m.id && (
+                      <button
+                        onClick={() => {
+                          setPendingDeleteMaterialId(null);
+                          setUploadStatus('');
+                        }}
+                        className="text-gray-500 hover:text-gray-700 text-xs px-2 py-1 rounded hover:bg-gray-100"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

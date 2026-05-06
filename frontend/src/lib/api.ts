@@ -7,7 +7,9 @@ import {
   Outline, 
   Lesson, 
   Slides,
-  ApiResponse 
+  CurriculumDiff,
+  OutlineItem,
+  SuggestedOutline,
 } from '@/types/api';
 
 export const curriculumApi = {
@@ -30,7 +32,7 @@ export const curriculumApi = {
     await apiClient.delete(`/curriculum/version/${id}`);
   },
 
-  createOutline: async (curriculumVersionId: number, items: object[]): Promise<Outline> => {
+  createOutline: async (curriculumVersionId: number, items: OutlineItem[]): Promise<Outline> => {
     const res = await apiClient.post('/curriculum/outline', {
       curriculum_version_id: curriculumVersionId,
       items,
@@ -48,17 +50,17 @@ export const curriculumApi = {
     return res.data;
   },
 
-  updateOutline: async (id: number, items: object[]): Promise<Outline> => {
+  updateOutline: async (id: number, items: OutlineItem[]): Promise<Outline> => {
     const res = await apiClient.put(`/curriculum/outline/${id}`, { items });
     return res.data;
   },
 
-  diffVersions: async (versionAId: number, versionBId: number) => {
+  diffVersions: async (versionAId: number, versionBId: number): Promise<CurriculumDiff> => {
     const res = await apiClient.get(`/curriculum/diff/${versionAId}/${versionBId}`);
     return res.data;
   },
 
-  suggestOutline: async (curriculumVersionId: number) => {
+  suggestOutline: async (curriculumVersionId: number): Promise<SuggestedOutline> => {
     const res = await apiClient.post(`/curriculum/outline/suggest/${curriculumVersionId}`);
     return res.data;
   },
